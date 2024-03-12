@@ -1,0 +1,109 @@
+working 
+
+
+function extractEmailsAndSend() {
+  var emailData = [];
+  var headersAdded = false; // To track if headers are already added
+
+  // Function to check if an email is internal
+  function isInternalEmail(message) {
+    // Implement your logic to determine if the email is internal
+    // For example, you can check if the sender domain matches your own domain
+    var senderEmail = message.getFrom();
+    var senderDomain = senderEmail.split('@')[1];
+    var yourDomain = 'gmail.com'; // Change this to your own domain
+
+    return senderDomain === yourDomain;
+  }
+
+  // Function to handle null or invalid dates
+  function formatDate(date) {
+    if (date instanceof Date && !isNaN(date)) {
+      return Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+    } else {
+      return 'Error';
+    }
+  }
+
+  var threads = GmailApp.getInboxThreads();
+
+  for (var i = 0; i < threads.length; i++) {
+    var messages = threads[i].getMessages();
+
+    for (var j = 0; j < messages.length; j++) {
+      var message = messages[j];
+
+      var from = message.getFrom() || '';
+      var to = message.getTo() || ''; // Get the recipients from the "To" field
+      var cc = message.getCc() || ''; // Retrieve CC recipients
+      var date = new Date(message.getDate()); // Convert date to Date object
+      var subject = message.getSubject() || '';
+
+      // Get the plain text body of the email
+      var body = message.getPlainBody() ? message.getPlainBody().slice(0, 40) : ''; // Limiting to 40 characters
+
+      // Extract sender's name without email address from 'from' field
+      var senderName = from.match(/([^<]+)/) ? from.match(/([^<]+)/)[1].trim() : from;
+
+      // Extract sender's email and receiver's email from 'from' and 'to' fields
+      var senderEmail = from.match(/<([^>]+)>/) ? from.match(/<([^>]+)>/)[1] : '';
+      var senderUsername = senderEmail ? senderEmail.split('@')[0] : ''; // Extract username
+      var senderDomain = senderEmail ? senderEmail.split('@')[1] : ''; // Extract domain
+
+      var receiverEmail = to; // Assign recipients to the receiver's email
+
+      // Get receiver's domain
+      var receiverDomain = receiverEmail ? receiverEmail.split('@')[1] : '';
+
+      // Get CC recipients
+      var ccRecipients = '';
+      if (cc) {
+        if (Array.isArray(cc)) {
+          ccRecipients = cc.map(function (recipient) {
+            return recipient.getAddress();
+          }).join(', ');
+        } else {
+          ccRecipients = cc; // If not an array, directly use CC recipients
+        }
+      }
+
+      // Check if the email is internal
+      var internalEmail = isInternalEmail(message);
+
+      // Get labels associated with the thread
+      var labels = threads[i].getLabels();
+      var labelNames = labels.map(function (label) {
+        return label.getName();
+      }).join(', ');
+
+      // Create a timestamp for the current email
+      var timestamp = formatDate(date);
+
+      // Add headers only once
+      if (!headersAdded) {
+        emailData.push(['Sender Email', 'Sender Username', 'From Domain', 'From', 'To', 'To Domain', 'CC', 'Timestamp', 'Date', 'Subject', 'Body', 'Labels']);
+        headersAdded = true;
+      }
+
+      // Push data for this message to the emailData array
+      emailData.push([senderEmail, senderUsername, senderDomain, senderName, receiverEmail, receiverDomain, ccRecipients, timestamp, date, subject, body, labelNames]);
+    }
+  }
+
+  var spreadsheetId = '1w5vTsL9SG2EHBtIKSk_dhDv6ESMlM16pzHwYoao57pU';
+  var sheetName = 'sheet1';
+
+  try {
+    var sheet = SpreadsheetApp.openById(spreadsheetId).getSheetByName(sheetName);
+
+    // Clear existing content in the sheet
+    sheet.clear();
+
+    // Write the email data to the spreadsheet
+    sheet.getRange(1, 1, emailData.length, emailData[0].length).setValues(emailData); // Adjusted range to match the number of columns
+
+    Logger.log('Email data written to the spreadsheet successfully.');
+  } catch (error) {
+    Logger.log('Error: ' + error);
+  }
+}
